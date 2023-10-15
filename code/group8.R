@@ -1,155 +1,120 @@
-library(shiny)
-# 1. Data Cleaning
+library(pls)
+library(randomForest)
+library(rpart)
+library(glmnet)
+library(Metrics)
+library(rpart.plot)
 
-# Read the data
-# Load the dataset
-data <- read.csv("../data/BodyFat.csv")
+# Data Cleaning Function
+clean_data <- function(data_path) {
+  # Read the data
+  data <- read.csv(data_path)
+  
+  # Remove rows with 0 or NA values
+  data <- data[rowSums(data == 0) == 0, ]
+  data <- na.omit(data)
+  data <- data[-which.max(data$BODYFAT), ] # Remove row with max BODYFAT
+  return(data)
+}
 
-# Remove rows with 0 or NA values
-data <- data[rowSums(data == 0) == 0, ]
-data <- na.omit(data)
+# Load the dataset and clean the data
+data <- clean_data("BodyFat.csv")
 
-# Remove two rows that have potential outliers (bodyfat of 0 and bodyfat of 45.1)
-data <- data[-which.max(data$BODYFAT), ]
-
-# 2. Variable Selection
+# Variable Selection
 
 # Calculate the correlation matrix
 cor_matrix <- cor(data)
+print(cor_matrix)
+## The r-square value for chest, abdomen, and adiposity are the highest against body fat with 0.687, 0.803 and 0.710 repectively. 
 
-# Extract the target variables based on our previous selection
-selected_vars <- c('ABDOMEN', 'ADIPOSITY', 'CHEST', 'BODYFAT')
-
-# Subset the data
-data_selected <- data[, selected_vars]
-
-# 3. Model Training
-
-# Splitting the data into 80/20
-set.seed(42)
-train_indices <- sample(1:nrow(data_selected), 0.8 * nrow(data_selected))
-train_data <- data_selected[train_indices, ]
-test_data <- data_selected[-train_indices, ]
-
-# PCR (Principal Component Regression)
-library(pls)
-pcr_model <- pcr(BODYFAT ~ ., data=train_data, validation="CV")
-pcr_pred <- predict(pcr_model, test_data[, -4])
-
-# Random Forest
-library(randomForest)
-rf_model <- randomForest(BODYFAT ~ ., data=train_data)
-rf_pred <- predict(rf_model, test_data)
-
-# Decision Tree
-library(rpart)
-tree_model <- rpart(BODYFAT ~ ., data=train_data)
-tree_pred <- predict(tree_model, test_data)
-
-# Linear Regression
-lm_model <- lm(BODYFAT ~ ., data=train_data)
-lm_pred <- predict(lm_model, test_data)
-
-# Lasso Regression
-library(glmnet)
-x_train <- as.matrix(train_data[, -4])
-y_train <- train_data$BODYFAT
-x_test <- as.matrix(test_data[, -4])
-lasso_model <- glmnet(x_train, y_train, alpha=1)
-lasso_pred <- predict(lasso_model, s=0.01, newx=x_test)
-
-# Performance Metrics
-library(Metrics)
-models <- list(pcr=pcr_pred, rf=rf_pred, tree=tree_pred, lm=lm_pred, lasso=lasso_pred)
-
-#Interpretation:
-
-#The Decision Tree model has the best performance metrics across the board. It has the lowest MAE and MSE, meaning its predictions are, on average, the closest to the actual values and has the least squared error. Its R 
-#2 value is the highest, indicating it explains about 69.25% of the variance in the body fat percentage using the selected features.
-#The Random Forest model comes in as the second best, with slightly higher MAE and MSE values than the Decision Tree and an 
-#R2of 66.27%.PCR is performing poorly given its negative R
-#2 value.Given these results, the Decision Tree is the best model among those evaluated for this dataset using the selected features. It provides a balance of accuracy and interpretability, making it especially suitable for a "rule-of-thumb" approach.
-
-# Calculate R2 manually
-R2 <- function(y_true, y_pred) {
-  sst <- sum((y_true - mean(y_true))^2)
-  ssr <- sum((y_true - y_pred)^2)
-  return(1 - ssr/sst)
+# Variable Selection Function
+select_data <- function(data, vars) {
+  return(data[, c(vars, "BODYFAT")])
 }
 
-# Update results calculation
-results <- lapply(models, function(pred) {
-  list(
-    MAE = mae(test_data$BODYFAT, pred),
-    MSE = mse(test_data$BODYFAT, pred),
-    R2 = R2(test_data$BODYFAT, pred)
-  )
-})
-
-# Convert results list to a data frame
-results_df <- do.call(rbind, results)
-
-# Convert the list of lists into a data frame
-final_results <- data.frame(
-  Model = names(results),
-  MAE = sapply(results, function(x) x$MAE),
-  MSE = sapply(results, function(x) x$MSE),
-  R2 = sapply(results, function(x) x$R2)
-)
-
-# Print the final results table
-print(final_results)
-
-library(rpart.plot)
-
-# Visualize the Decision Tree without the extra argument
-rpart.plot(tree_model, type=4, main="Decision Tree for Estimating Body Fat Percentage")
-
-
-ui <- fluidPage(
-  titlePanel("Body Fat Prediction App"),
+# Model Training Function
+train_models <- function(train_data) {
+  # PCR
+  pcr_model <- pcr(BODYFAT ~ ., data=train_data, validation="CV")
+  # Random Forest
+  rf_model <- randomForest(BODYFAT ~ ., data=train_data)
+  # Decision Tree
+  tree_model <- rpart(BODYFAT ~ ., data=train_data)
+  # Linear Regression
+  lm_model <- lm(BODYFAT ~ ., data=train_data)
+  # Lasso Regression
+  x_train <- as.matrix(train_data[, -ncol(train_data)])
+  y_train <- train_data$BODYFAT
+  lasso_model <- glmnet(x_train, y_train, alpha=1)
   
-  sidebarLayout(
-    sidebarPanel(
-      # Input fields for the selected features
-      numericInput("abdomen", "Abdomen Circumference:", value = NULL),
-      numericInput("adiposity", "Adiposity:", value = NULL),
-      numericInput("chest", "Chest Circumference:", value = NULL),
-      
-      actionButton("predictButton", "Predict Body Fat")
-    ),
-    
-    mainPanel(
-      h3("Predicted Body Fat:"),
-      verbatimTextOutput("predictionText")
-    )
-  )
-)
-
-# Define the server logic
-server <- function(input, output) {
-  # Observe the button click and update the predicted body fat
-  observeEvent(input$predictButton, {
-    # Create a data frame with user inputs for making predictions
-    new_data <- data.frame(
-      ABDOMEN = input$abdomen,
-      ADIPOSITY = input$adiposity,
-      CHEST = input$chest,
-      BODYFAT = NA
-    )
-    
-    # Make predictions using the Linear Regression model
-    predicted_body_fat <- predict(tree_model, newdata = new_data)
-    
-    # Display the predicted body fat
-    output$predictionText <- renderText({
-      paste("Predicted Body Fat:", round(predicted_body_fat, 2))
-    })
-  })
+  return(list(pcr=pcr_model, rf=rf_model, tree=tree_model, lm=lm_model, lasso=lasso_model))
 }
 
-# Run the Shiny app
-shinyApp(ui = ui, server = server)
+# Splitting Data Function
+split_data <- function(data) {
+  set.seed(42)
+  train_indices <- sample(1:nrow(data), 0.8 * nrow(data))
+  train <- data[train_indices, ]
+  test <- data[-train_indices, ]
+  return(list(train=train, test=test))
+}
 
+# Performance Metrics Calculation Function
+calculate_metrics <- function(models, test_data) {
+  preds <- list(
+    pcr=predict(models$pcr, test_data[, -ncol(test_data)]),
+    rf=predict(models$rf, test_data),
+    tree=predict(models$tree, test_data),
+    lm=predict(models$lm, test_data),
+    lasso=predict(models$lasso, s=0.01, newx=as.matrix(test_data[, -ncol(test_data)]))
+  )
+  
+  R2 <- function(y_true, y_pred) {
+    sst <- sum((y_true - mean(y_true))^2)
+    ssr <- sum((y_true - y_pred)^2)
+    return(1 - ssr/sst)
+  }
+  
+  results <- lapply(preds, function(pred) {
+    list(
+      MAE = mae(test_data$BODYFAT, pred),
+      MSE = mse(test_data$BODYFAT, pred),
+      R2 = R2(test_data$BODYFAT, pred)
+    )
+  })
+  
+  results_df <- do.call(rbind, results)
+  final_results <- data.frame(
+    Model = names(results),
+    MAE = sapply(results, function(x) x$MAE),
+    MSE = sapply(results, function(x) x$MSE),
+    R2 = sapply(results, function(x) x$R2)
+  )
+  
+  return(final_results)
+}
 
+# Original Data with selected variables
+selected_vars <- c('ABDOMEN', 'ADIPOSITY', 'CHEST')
+data_selected <- select_data(data, selected_vars)
+splits_original <- split_data(data_selected)
+models_original <- train_models(splits_original$train)
+results_original <- calculate_metrics(models_original, splits_original$test)
+
+# Reduced Data with only CHEST and ABDOMEN
+reduced_vars <- c('CHEST', 'ABDOMEN')
+data_reduced <- select_data(data, reduced_vars)
+splits_reduced <- split_data(data_reduced)
+models_reduced <- train_models(splits_reduced$train)
+results_reduced <- calculate_metrics(models_reduced, splits_reduced$test)
+
+# Print the results
+print("Original Data Results:")
+print(results_original)
+print("Reduced Data Results:")
+print(results_reduced)
+
+# Visualize the Decision Tree for Original Data
+library(rpart.plot)
+rpart.plot(models_original$tree, type=4, main="Decision Tree for Estimating Body Fat Percentage (Original Data)")
 
