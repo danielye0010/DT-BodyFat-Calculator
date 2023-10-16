@@ -4,6 +4,8 @@ library(rpart)
 library(glmnet)
 library(Metrics)
 library(rpart.plot)
+library(ggplot2)
+library(tidyr)
 
 # Data Cleaning Function
 clean_data <- function(data_path) {
@@ -118,3 +120,13 @@ print(results_reduced)
 library(rpart.plot)
 rpart.plot(models_original$tree, type=4, main="Decision Tree for Estimating Body Fat Percentage (Original Data)")
 
+# Visualize the Model Evaluation
+results_long <- gather(final_results, Metric, Value, -Model)
+ggplot(results_long, aes(x = Model, y = Value, color = Model)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~Metric, scales = "free_y", ncol = 1) +
+  labs(title = "Model Performance Evaluation",
+       y = "Metric Value",
+       color = "Model") +
+  theme_minimal()
