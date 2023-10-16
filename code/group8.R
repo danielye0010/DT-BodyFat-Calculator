@@ -22,7 +22,7 @@ clean_data <- function(data_path) {
 # Load the dataset and clean the data
 data <- clean_data("BodyFat.csv")
 
-# Variable Selection
+# Variable Selection Logic
 
 # Calculate the correlation matrix
 cor_matrix <- cor(data)
