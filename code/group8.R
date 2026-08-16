@@ -19,8 +19,10 @@ clean_data <- function(data_path) {
   return(data)
 }
 
-# Load the dataset and clean the data
-data <- clean_data("BodyFat.csv")
+# Support running either from the repository root (`Rscript code/group8.R`)
+# or interactively from inside the `code/` directory.
+data_path <- if (file.exists("data/BodyFat.csv")) "data/BodyFat.csv" else "../data/BodyFat.csv"
+data <- clean_data(data_path)
 
 # Variable Selection Logic
 
