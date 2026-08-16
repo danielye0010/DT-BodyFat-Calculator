@@ -2,7 +2,8 @@ library(ggplot2)
 library(reshape2)
 library(car)
 
-data <- read.csv("BodyFat.csv")
+data_path <- if (file.exists("data/BodyFat.csv")) "data/BodyFat.csv" else "../data/BodyFat.csv"
+data <- read.csv(data_path)
 
 # Remove rows with 0 or NA values
 data <- data[rowSums(data == 0) == 0, ]
@@ -28,12 +29,11 @@ ggplot(data = melted_correlation_matrix, aes(x = Var1, y = Var2, fill = value)) 
         panel.grid.major = element_blank(), 
         panel.border = element_blank(), 
         axis.ticks = element_blank(), 
-        legend.position = c(1.4, 0), # Adjust this coordinate to move the legend
+        legend.position = c(1.4, 0),
         legend.direction = "horizontal") +
   coord_fixed() +
   labs(x = "", y = "", title = "Correlation Matrix Heatmap",
        subtitle = "Color intensity and hue represent correlation strength")
-
 
 # Extract correlations with 'BODYFAT'
 bodyfat_correlations <- correlation_matrix['BODYFAT', ]
@@ -48,13 +48,8 @@ sorted_correlations <- sort(bodyfat_correlations, decreasing = TRUE)
 print(sorted_correlations)
 
 # Fit a linear model with the independent variables
-lm_model <- lm(BODYFAT ~ ABDOMEN+   ADIPOSITY    +   CHEST, data = data)
+lm_model <- lm(BODYFAT ~ ABDOMEN + ADIPOSITY + CHEST, data = data)
 
 # Calculate VIF
 vif_results <- vif(lm_model)
 print(vif_results)
-
-
-
-
-
