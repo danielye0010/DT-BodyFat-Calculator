@@ -1,0 +1,10 @@
+.DS_Store
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Shiny / R generated artifacts
+rsconnect/
+*_cache/
+*_files/
